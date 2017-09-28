@@ -53,8 +53,8 @@ def main():
         for index in range(len(pod_indices)):
             result = api.reservation_make(type=ReservationType.INSTRUCTOR,
                                           pod_id=pod_pids[index],
-                                          end_time=end,
-                                          start_time=start)
+                                          start_time=start,
+                                          end_time=end)
             print('Reservation of pod ' + str(pod_names[index]) + ':'+str(datetime.now())+':'+result)
             
 if __name__ == "__main__":
