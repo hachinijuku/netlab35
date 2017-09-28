@@ -86,7 +86,7 @@ def main():
             # Set remove_type to NONE for Master pod
             # This is actually unnecessary, but use suspenders and a belt
             print('Removing pod:'+pod_names[index])
-            if (remove_type != RemoveMVS["NONE"] &&
+            if (remove_type != RemoveVMS["NONE"] and
                 all_pods[pod_indices[index]]['pod_cat'] == PodCategory.MASTER_VM):
                 this_remove_type = RemoveVMS["NONE"]
                 print('  Forcing removal type NONE for master pod')

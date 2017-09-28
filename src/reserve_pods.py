@@ -26,6 +26,8 @@ def main():
     tt = datetime.timetuple(current_time)
     if args.start != None:
         start = datetime.strptime(str(tt.tm_mon) + '/' + str(tt.tm_mday) + '/' + str(tt.tm_year) + ' ' + args.start,'%m/%d/%Y %H:%M')
+    else:
+        start = datetime.now()
     end = datetime.strptime(str(tt.tm_mon) + '/' + str(tt.tm_mday) + '/' + str(tt.tm_year) + ' ' + args.end,'%m/%d/%Y %H:%M')
 
     prog = re.compile(args.podexpr)
@@ -50,6 +52,7 @@ def main():
 
         for index in range(len(pod_indices)):
             if args.start == None:
+                print ('Doing none case')
                 result = api.reservation_make(type=ReservationType.INSTRUCTOR,
                                               pod_id=pod_pids[index],
                                               end_time=end)

@@ -19,13 +19,11 @@ def main():
 
     api = Client()
     all_vms = api.vm_inventory_list()
-    unused_vms = list(filter(lambda x: x['pc_pod_id'] != None, all_vms))
-    vm_names = [x['vm_name'] for x in unused_vms]
+    unused_vms = list(filter(lambda x: x['pc_pod_id'] == None, all_vms))
 
     # Verify VM deletion:
-    print('Unused VMs:')
-    for name in vm_names:
-        print('  '+name)
+    for vm in unused_vms:
+        print('  '+vm["vm_name"])
  
 if __name__ == "__main__":
    main()
