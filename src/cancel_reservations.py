@@ -31,7 +31,7 @@ def main():
     yes_no = input('Do you want to cancel these reservations (y/n)? ')
     if yes_no[0].lower() == 'y':
 
-        for res-id in args.res_ids
+        for res-id in args.res_ids:
             result = api.cancel(res_id)
             print('Reservation of pod ' + str(pod_names[index]) + ':'+str(datetime.now())+':'+result)
             
