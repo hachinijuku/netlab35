@@ -17,18 +17,16 @@ def main():
 
     parser = argparse.ArgumentParser(description='Online a number of NDG Pods')
     parser.add_argument('podexpr', help='regular expression describing names of pods to modify')
-    parser.add_argument('--start', help='start time', required=True)
+    parser.add_argument('--start', help='start time')
     parser.add_argument('--end', help='end time')
 
     args = parser.parse_args()
 
     current_time = datetime.now()
     tt = datetime.timetuple(current_time)
-    start = datetime.strptime(str(tt.tm_mon) + '/' + str(tt.tm_mday) + '/' + str(tt.tm_year) + ' ' + args.start,'%m/%d/%Y %H:%M')
-    if args.end == None:
-        end = start + timedelta(minutes=30)
-    else:
-        end = datetime.strptime(str(tt.tm_mon) + '/' + str(tt.tm_mday) + '/' + str(tt.tm_year) + ' ' + args.end,'%m/%d/%Y %H:%M')
+    if args.start != None:
+        start = datetime.strptime(str(tt.tm_mon) + '/' + str(tt.tm_mday) + '/' + str(tt.tm_year) + ' ' + args.start,'%m/%d/%Y %H:%M')
+    end = datetime.strptime(str(tt.tm_mon) + '/' + str(tt.tm_mday) + '/' + str(tt.tm_year) + ' ' + args.end,'%m/%d/%Y %H:%M')
 
     prog = re.compile(args.podexpr)
 
@@ -51,10 +49,18 @@ def main():
     if yes_no[0].lower() == 'y':
 
         for index in range(len(pod_indices)):
-            result = api.reservation_make(type=ReservationType.INSTRUCTOR,
-                                          pod_id=pod_pids[index],
-                                          start_time=start,
-                                          end_time=end)
+            if args.start == None:
+                result = api.reservation_make(type=ReservationType.INSTRUCTOR,
+                                              pod_id=pod_pids[index],
+                                              end_time=end)
+
+            else:
+                result = api.reservation_make(type=ReservationType.INSTRUCTOR,
+                                              pod_id=pod_pids[index],
+                                              end_time=end,
+                                              start_time=start)
+
+
             print('Reservation of pod ' + str(pod_names[index]) + ':'+str(datetime.now())+':'+result)
             
 if __name__ == "__main__":
