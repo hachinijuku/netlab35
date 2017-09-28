@@ -43,7 +43,7 @@ def main():
     pod_names = [all_pods[x]['pod_name'] for x in pod_indices]
     pod_pids = [all_pods[x]['pod_id'] for x in pod_indices]
 
-    print('Pods to set to ' + str(args.state))
+    print('Pods to reserve')
     for name in pod_names:
         print('  '+name)
 
