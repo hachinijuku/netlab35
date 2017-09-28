@@ -26,7 +26,8 @@ def main():
     # Get list of all VMs.
     api = Client()
 
-    print(str(res_id)) for x in args.res_ids
+    for x in args.res_ids:
+        print(str(res_id))
     yes_no = input('Do you want to cancel these reservations (y/n)? ')
     if yes_no[0].lower() == 'y':
 
