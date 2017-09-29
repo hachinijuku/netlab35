@@ -18,9 +18,20 @@ import sys
 import datetime
 import re
 
+from multiprocessing.pool import ThreadPool
 from netlab.client import Client
 from netlab.enums import RemoveVMS
 from netlab.enums import PodCategory
+
+Global_remove_type = None
+Global_pod_names = []
+Global_pod_pids = []
+
+def pod_deleter(index):
+    result = api.pod_state_change(pod_id=Global_pod_pids[index],
+                                  remove_type=Global_remove_type)
+    print('Removing '+str(Global_pod_pids[index])+':'+Global_pod_names[index])
+
 
 def main():
     parser = argparse.ArgumentParser(description='Delete NDG Netlab Pods')
@@ -38,7 +49,7 @@ def main():
                         help='regular expressions describing names of pods to remove',
                         nargs=argparse.REMAINDER)
     args = parser.parse_args()
-    remove_type = RemoveVMS[args.remove_type.upper()]
+    Global_remove_type = RemoveVMS[args.remove_type.upper()]
 
     # Check if any arguments are provided
     if not args.podexprs:
@@ -56,7 +67,7 @@ def main():
                                                 list(map(lambda x, y: y if prog.match(x['pod_name']) else None,
                                                          all_pods,
                                                          range(len(all_pods))))))
-    pod_names = [all_pods[x]['pod_name'] for x in pod_indices]
+    Global_pod_names = [all_pods[x]['pod_name'] for x in pod_indices]
     pod_pids = [all_pods[x]['pod_id'] for x in pod_indices]
 
     # Verify pod deletion
@@ -79,22 +90,12 @@ def main():
             print("Pod Offlined:"+str(datetime.datetime.now())+':'+pod_names[index]+':'+result)
 
     # Then attempt removal
-    for index in range(len(pod_indices)):
-        if (args.n):
-            print('Removing '+str(pod_pids[index])+':'+pod_names[index])
-        else:
-            # Set remove_type to NONE for Master pod
-            # This is actually unnecessary, but use suspenders and a belt
-            print('Removing pod:'+pod_names[index])
-            if (remove_type != RemoveVMS["NONE"] and
-                all_pods[pod_indices[index]]['pod_cat'] == PodCategory.MASTER_VM):
-                this_remove_type = RemoveVMS["NONE"]
-                print('  Forcing removal type NONE for master pod')
-            else:
-                this_remove_type = remove_type
-            result = api.pod_remove_task(pod_id=pod_pids[index],
-                                             remove_vms=this_remove_type) 
-            print('  Pod Removasl Status:'+str(datetime.datetime.now())+':'+pod_names[index] + ':'+result['status'])
+    pool = ThreadPool(processes=16)
+    results = pool.map(pod_deleter, range(len(pod_indices)))
+    pool.close()
+    pool.join()
+    print('  Pod Removasl Status:' + Global_pod_names[index] + ':' + result['status'])
+
 
 if __name__ == "__main__":
    main()
