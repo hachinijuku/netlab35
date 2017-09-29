@@ -5,6 +5,7 @@ import enum
 import sys
 
 import datetime
+import pytz
 from datetime import timedelta, datetime
 import re
 
@@ -44,27 +45,36 @@ def main():
     pod_pids = [all_pods[x]['pod_id'] for x in pod_indices]
 
     print('Pods to reserve from ' + str(start) + ' to ' + str(end) + ':')
+
+
+
     for name in pod_names:
         print('  '+name)
 
     yes_no = input('Do you want to reserve these pods from ' + str(start) + ' to ' + str(end) + ' (y/n)? ')
     if yes_no[0].lower() == 'y':
 
+#        localtz = pytz.timezone("America/New_York")
+#        start = start.astimezone(pytz.utc)
+#        end = end.astimezone(pytz.utc)
+
         for index in range(len(pod_indices)):
             if args.start == None:
                 print ('Doing none case')
                 result = api.reservation_make(type=ReservationType.INSTRUCTOR,
                                               pod_id=pod_pids[index],
-                                              end_time=end)
+                                              end_time=end,
+                                              acc_id=100001)
 
             else:
                 result = api.reservation_make(type=ReservationType.INSTRUCTOR,
                                               pod_id=pod_pids[index],
                                               end_time=end,
-                                              start_time=start)
+                                              start_time=start,
+                                              acc_id=100001)
 
 
-            print('Reservation of pod ' + str(pod_names[index]) + ':'+str(datetime.now())+':'+result)
+            print('Reservation of pod ' + str(pod_names[index]) + ':'+str(datetime.now())+':'+str(result['res_id']))
             
 if __name__ == "__main__":
    main()

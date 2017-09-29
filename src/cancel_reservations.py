@@ -32,8 +32,12 @@ def main():
 
         for res_id in args.res_ids:
             print('Argument is [' + str(int(res_id)) + ']')
-            result = api.reservation_cancel(res_id = int(res_id))
-            print('Cancellation of reservation ' + str(res_id) + ':'+str(datetime.now())+':'+result)
+            try:
+                result = api.reservation_cancel(res_id = int(res_id))
+                print('Cancellation of reservation ' + str(res_id) + ':'+str(datetime.now())+':'+str(result))
+            except:
+                result = api.reservation_post(res_id = int(res_id))
+                print('Cancellation of active reservation ' + str(res_id) + ':' + str(datetime.now()) + ':' + result)
             
 if __name__ == "__main__":
    main()
