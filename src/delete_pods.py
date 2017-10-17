@@ -33,7 +33,7 @@ def pod_deleter(this_pod_pid, this_pod_name, this_remove_type):
     result = Global_api.pod_state_change(pod_id=this_pod_pid,
                                   remove_type=this_remove_type)
     print('Removing '+str(this_pod_pid)+':'+this_pod_name)
-
+    
 
 def main():
     parser = argparse.ArgumentParser(description='Delete NDG Netlab Pods')
@@ -99,15 +99,12 @@ def main():
             except:
                 print("Couldn't offline pod " + pod_names[index])
 
-    # Then attempt removal
-    pool = ThreadPool(processes=16)
+    # Then delete them.
     for index in range(len(pod_indices)):
-        print('deleter ' + str(index))
-        pool.apply(pod_deleter,
-                   (pod_pids[index], pod_names[index], args.removal_type),
-                   callback=log_result)
-    pool.close()
-    pool.join()
+        result = Global_api.pod_remove_task(pod_id=pod_indices[index],
+                                            remove_vms=remove_type)
+        print('Removing '+str(this_pod_pid)+':'+this_pod_name)
+        
     for index in range(len(Global_results)):
         print('  Pod Removal Status:' + pod_names[index] + ':' + Global_results[index]['status'])
 
