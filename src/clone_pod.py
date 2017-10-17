@@ -17,6 +17,12 @@ def get_unused_pid(id_list,hwm,index):
     else:
         return index - num_in_list + hwm + 1
 
+Global_outputs = []
+
+def pod_logger(arg):
+    Global_outputs.append(arg)
+
+
 def main():
 
     si = None
@@ -65,32 +71,34 @@ def main():
         sys.exit()
 
     current_pod_ordinal = 0
-    for host_num in range(num_hosts):
 
-        clone_specs = []
+    initial_clone_this_round = 0
+    while initial_clone_this_round < num_clones:
+        
+        num_to_clone_this_round = min(num_clones - initial_clone_this_round, num_hosts)
 
-        for _ in range(pc_count):
-            clone_specs.append({"clone_datastore":DATASTORE,
-                                "clone_vh_id":VHOST_IDS[host_num]})
-        if (extra_clones > 0):
-            num_on_this_vhost = min_clones + 1
-            extra_clones -= 1
-        else:
-            num_on_this_vhost = min_clones
-        for clone_num in range(num_on_this_vhost):
+        clone_specs = [] 
+        for host_index in range(num_to_clone_this_round):
+            clone_specs.append([])
+            for _ in range(pc_count):
+                clone_specs[host_index].append({"clone_datastore":DATASTORE,
+                                                "clone_vh_id":VHOST_IDS[host_index]})
+
+        for clone_num in range(num_to_clone_this_round):
             this_pid = get_unused_pid(unused_pods, pid_hwm, current_pod_ordinal)
             current_pod_ordinal += 1
-            if (args.n):
-                print('clone('+args.src_pid+', '+str(this_pid+','+args.pod_prefix+str(this_pid)+','+clone_specs[0]["clone_datastore"]+','+str(clone_specs[0]["clone_vh_id"])+')'))
-            else:
-                print("Attempting to create clone. PID="+str(this_pid))
-                clone_pod_name = args.pod_prefix+str(this_pid)
-                output = \
-                    api.pod_clone_task(source_pod_id=args.src_pid,
-                                       clone_pod_id=this_pid,
-                                       clone_pod_name=clone_pod_name,
-                                       pc_clone_specs=clone_specs)
-                print("Clone result:"+str(datetime.datetime.now())+':'+clone_pod_name +':' + str(output['status']))
+            clone_pod_name = args.pod_prefix + str(this_pid)
+            # try:
+            result = api.pod_clone_task(source_pod_id=args.src_pid,
+                                            clone_pod_id=this_pid,
+                                            clone_pod_name=clone_pod_name,
+                                            pc_clone_specs=clone_specs[clone_num])
+#            except:
+#                result = {'status':'FAILED'}
+            print(clone_pod_name + '(' + str(this_pid) + '):' + result['status'])
+
+        initial_clone_this_round += num_to_clone_this_round
+
 
 
 

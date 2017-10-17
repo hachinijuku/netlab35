@@ -14,7 +14,6 @@ def main():
     si = None
 
     parser = argparse.ArgumentParser(description='Online a number of NDG Pods')
-    parser.add_argument('podexpr', help='regular expression describing names of pods to modify')
     parser.add_argument("--state", 
                         action="store",
                         choices=tuple(t.name.lower() for t in PodState),
@@ -24,22 +23,27 @@ def main():
                         action='store_const',
                         const=True,
                         help='dry run')
+    parser.add_argument('podexprs',
+                        help='regular expression describing names of pods to modify',
+                        nargs=argparse.REMAINDER)
     args = parser.parse_args()
 
 
     args.state = PodState[args.state.upper()]
     
 
-    prog = re.compile(args.podexpr)
+    
 
     # Get list of all VMs.
     api = Client()
     all_pods = api.pod_list()
-
-    pod_indices = list(filter(lambda x: x != None,
-                              list(map(lambda x, y: y if prog.match(x['pod_name']) else None,
-                                       all_pods,
-                                       range(len(all_pods))))))
+    pod_indices = []
+    for expr in args.podexprs:
+        prog = re.compile(expr)
+        pod_indices = pod_indices + list(filter(lambda x: x != None,
+                                                list(map(lambda x, y: y if prog.match(x['pod_name']) else None,
+                                                         all_pods,
+                                                         range(len(all_pods))))))
     pod_names = [all_pods[x]['pod_name'] for x in pod_indices]
     pod_pids = [all_pods[x]['pod_id'] for x in pod_indices]
 

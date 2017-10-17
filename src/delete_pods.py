@@ -18,22 +18,9 @@ import sys
 import datetime
 import re
 
-from multiprocessing.pool import ThreadPool
 from netlab.client import Client
 from netlab.enums import RemoveVMS
 from netlab.enums import PodCategory
-
-Global_api = None
-Global_results = []
-
-def log_result(result):
-    Global_results.append(result)
-
-def pod_deleter(this_pod_pid, this_pod_name, this_remove_type):
-    result = Global_api.pod_state_change(pod_id=this_pod_pid,
-                                  remove_type=this_remove_type)
-    print('Removing '+str(this_pod_pid)+':'+this_pod_name)
-
 
 def main():
     parser = argparse.ArgumentParser(description='Delete NDG Netlab Pods')
@@ -45,13 +32,12 @@ def main():
                         "--removal_type", 
                         action="store",
                         choices=tuple(t.name.lower() for t in RemoveVMS),
-                        default=RemoveVMS.NONE.name.lower(),
-                        dest="remove_type")
+                        default=RemoveVMS.NONE.name.lower())
     parser.add_argument('podexprs',
                         help='regular expressions describing names of pods to remove',
                         nargs=argparse.REMAINDER)
     args = parser.parse_args()
-    remove_type = RemoveVMS[args.remove_type.upper()]
+    removal_type = RemoveVMS[args.removal_type.upper()]
 
     # Check if any arguments are provided
     if not args.podexprs:
@@ -59,58 +45,50 @@ def main():
         sys.exit(1)
 
     # Identify the pod names matching the regular expressions
-    Global_api = Client()
-    all_pods = Global_api.pod_list()
+    api = Client()
+    all_pods = api.pod_list()
     pod_indices=[]
     for expr in args.podexprs:
-        print('expr is '+expr)
         prog = re.compile(expr)
-        pod_indices = pod_indices + list(filter(lambda x: x != None,
-                                                list(map(lambda x, y: y if prog.match(x['pod_name']) else None,
-                                                         all_pods,
-                                                         range(len(all_pods))))))
+        this_index = list(filter(lambda x: x != None,
+                                 list(map(lambda x, y: y if prog.match(x['pod_name']) else None,
+                                          all_pods,
+                                          range(len(all_pods))))))
+        pod_indices += this_index
+
     pod_names = [all_pods[x]['pod_name'] for x in pod_indices]
-    pod_pids = [all_pods[x]['pod_id'] for x in pod_indices]
+    pod_ids = [all_pods[x]['pod_id'] for x in pod_indices]
 
     # Verify pod deletion
     print('Pods to be deleted')
     for name in pod_names:
         print('  '+name)
 
-    print('Removal type is '+args.remove_type)
+    print('Removal type is '+args.removal_type)
     yes_no = input("Do you want to remove all these pods (y/n)? ")
     if yes_no[0].lower() != 'y':
         sys.exit(2)
 
-    print('Pod_indices')
-    for i in pod_indices:
-        print(' ' + str(i))
-
     # First offline all the pods
     for index in range(len(pod_indices)):
-        print('loop: ' + str(index))
         if (args.n):
-            print('Offlining '+str(pod_pids[index])+':'+pod_names[index])
+            print('Offlining '+str(pod_ids[index])+':'+pod_names[index])
         else:
             try:
-                result = Global_api.pod_state_change(pod_id=pod_pids[index],
+                result = api.pod_state_change(pod_id=pod_ids[index],
                                                      state="OFFLINE")
-                print("Pod Offlined:"+str(datetime.datetime.now())+':'+pod_names[index]+':'+result)
+                print("Pod Offlined:"+str(datetime.datetime.now())+':'+pod_names[index]+'(' + str(pod_ids[index]) + '):'+result)
             except:
                 print("Couldn't offline pod " + pod_names[index])
 
-    # Then attempt removal
-    pool = ThreadPool(processes=16)
-    for index in range(len(pod_indices)):
-        print('deleter ' + str(index))
-        pool.apply(pod_deleter,
-                   (pod_pids[index], pod_names[index], args.removal_type),
-                   callback=log_result)
-    pool.close()
-    pool.join()
-    for index in range(len(Global_results)):
-        print('  Pod Removal Status:' + pod_names[index] + ':' + Global_results[index]['status'])
 
+    for index in range(len(pod_indices)):
+ 
+        try:
+            result = api.pod_remove_task(pod_id = pod_ids[index], remove_vms = removal_type);
+        except:
+            result = {'status':'FAILED'}
+        print(pod_names[index] + '(' + str(pod_ids[index]) + '):' + result['status'])
 
 if __name__ == "__main__":
    main()

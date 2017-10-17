@@ -67,14 +67,18 @@ def main():
                                               acc_id=100001)
 
             else:
+                #try:
                 result = api.reservation_make(type=ReservationType.INSTRUCTOR,
                                               pod_id=pod_pids[index],
                                               end_time=end,
                                               start_time=start,
                                               acc_id=100001)
+                print('Reservation of pod ' + str(pod_names[index]) + ':'+str(datetime.now())+':'+str(result['res_id']))
+
+                #except:
+                #    print('Problem reserving pod ' + str(pod_names[index]) + ' -- pod skipped')
 
 
-            print('Reservation of pod ' + str(pod_names[index]) + ':'+str(datetime.now())+':'+str(result['res_id']))
             
 if __name__ == "__main__":
    main()
