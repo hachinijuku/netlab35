@@ -81,9 +81,23 @@ def main():
             except:
                 print("Couldn't offline pod " + pod_names[index])
 
+    # Organize pods by vmhost
+    vm_pods = {}
+    for index in range(len(pod_indices)):
+        property = api.pod_get(pod_id = pod_ids[index], properties = 'remote_pc');
+        vm_index = api.pod_pc_get(pod_id = all_pods[0]['pod_id'],pl_index = 1)['vh_id']
+        pod_vms[index] = vm_index
+        try:
+            vm_pods[vm_index].append(index)
+        except:
+            vm_pods[vm_index] = [index]
+
+    for key in vm_pods:
+        print('vm '+ str(key))
+        for pod_index in vm_pods[key]:
+            print(pod_name[pod_index])
 
     for index in range(len(pod_indices)):
- 
         try:
             result = api.pod_remove_task(pod_id = pod_ids[index], remove_vms = removal_type);
         except:
