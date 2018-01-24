@@ -18,18 +18,26 @@ def main():
 
     parser = argparse.ArgumentParser(description='Online a number of NDG Pods')
     parser.add_argument('podexpr', help='regular expression describing names of pods to modify')
-    parser.add_argument('--start', help='start time')
-    parser.add_argument('--end', help='end time')
+    parser.add_argument('--start', help='start time in form "[MM/DD/YYYY] HH:MM"')
+    parser.add_argument('--end', help='end time', required=True)
 
     args = parser.parse_args()
 
     current_time = datetime.now()
     tt = datetime.timetuple(current_time)
     if args.start != None:
-        start = datetime.strptime(str(tt.tm_mon) + '/' + str(tt.tm_mday) + '/' + str(tt.tm_year) + ' ' + args.start,'%m/%d/%Y %H:%M')
+        if "/" in args.start:
+            start = datetime.strptime(args.start, '%m/%d/%Y %H:%M')
+        else:
+            start = datetime.strptime(str(tt.tm_mon) + '/' + str(tt.tm_mday) + '/' + str(tt.tm_year) + ' ' + args.start,'%m/%d/%Y %H:%M')
     else:
         start = datetime.now()
-    end = datetime.strptime(str(tt.tm_mon) + '/' + str(tt.tm_mday) + '/' + str(tt.tm_year) + ' ' + args.end,'%m/%d/%Y %H:%M')
+
+
+    if args.end and '/' in args.end:
+        end = datetime.strptime(args.end,'%m/%d/%Y %H:%M')
+    else:
+        end = datetime.strptime(str(tt.tm_mon) + '/' + str(tt.tm_mday) + '/' + str(tt.tm_year) + ' ' + args.end,'%m/%d/%Y %H:%M')
 
     prog = re.compile(args.podexpr)
 
@@ -67,16 +75,15 @@ def main():
                                               acc_id=100001)
 
             else:
-                #try:
-                result = api.reservation_make(type=ReservationType.INSTRUCTOR,
-                                              pod_id=pod_pids[index],
-                                              end_time=end,
-                                              start_time=start,
-                                              acc_id=100001)
-                print('Reservation of pod ' + str(pod_names[index]) + ':'+str(datetime.now())+':'+str(result['res_id']))
-
-                #except:
-                #    print('Problem reserving pod ' + str(pod_names[index]) + ' -- pod skipped')
+                try:
+                    result = api.reservation_make(type=ReservationType.INSTRUCTOR,
+                                                  pod_id=pod_pids[index],
+                                                  end_time=end,
+                                                  start_time=start,
+                                                  acc_id=100001) 
+                    print('Reservation of pod ' + str(pod_names[index]) + ':'+str(datetime.now())+':'+str(result['res_id']))
+                except:
+                    print('Problem reserving pod ' + str(pod_names[index]) + ' -- pod skipped')
 
 
             

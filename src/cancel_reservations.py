@@ -29,13 +29,16 @@ def main():
     # Get list of all VMs.
     api = Client()
 
+    res_id_copy = []
     for res_id in args.res_ids:
+        res_id_copy.append(res_id)
         print('  '+res_id)
 
     yes_no = input("Do you want to cancel these reservations? (y/n)? ")
     if yes_no[0].lower() == 'y':
 
-        for res_id in args.res_ids:
+        for res_id in res_id_copy:
+            print('Attempting cancellation of reservation '+res_id)
             result = api.reservation_cancel(res_id=int(res_id))
             print('Cancellation Result:'+str(datetime.datetime.now())+':'+res_id+':'+result)
 

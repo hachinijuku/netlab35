@@ -17,10 +17,31 @@ import enum
 import sys
 import datetime
 import re
+from multiprocessing import Pool
+import random
 
 from netlab.client import Client
 from netlab.enums import RemoveVMS
 from netlab.enums import PodCategory
+
+Global_results = []
+
+## Sorry to ask this.
+# Need to change this to be dynamically determined
+NUM_VMS = 4
+
+def printer_func(this_pod_id):
+    return "stand-in for removal of pod" + str(this_pod_id)
+
+def remove_func(this_pod_id, remove_vms_arg, api):
+    try:
+        print('starting removal of %d' % this_pod_id)
+        result = api.pod_remove_task(pod_id = this_pod_id,
+                                     remove_vms = remove_vms_arg);
+        return 'Pod ' + str(this_pod_id) + ': OK'
+    except:
+        #result = result = {'status':'Failed'}
+        return 'Pod ' + str(this_pod_id) + ':' + str(sys.exc_info()[0])
 
 def main():
     parser = argparse.ArgumentParser(description='Delete NDG Netlab Pods')
@@ -83,26 +104,62 @@ def main():
 
     # Organize pods by vmhost
     vm_pods = {}
+    pod_vms = [None]*len(pod_ids)
+
     for index in range(len(pod_indices)):
-        property = api.pod_get(pod_id = pod_ids[index], properties = 'remote_pc');
-        vm_index = api.pod_pc_get(pod_id = all_pods[0]['pod_id'],pl_index = 1)['vh_id']
+        # print('this pod_id is ' + str(pod_ids[index]))
+        this_pod_id = pod_ids[index]
+        property = api.pod_get(pod_id = this_pod_id, properties = 'remote_pc');
+        pod_pc = api.pod_pc_get(pod_id = this_pod_id, pl_index = 1)
+        if 'vh_id' in pod_pc.keys():
+            vm_index = pod_pc['vh_id']
+        else:
+            vm_index = random.uniform(1,NUM_VMS)
+        # print('vm_index of ' + str(pod_names[index]) + ' is ' + str(vm_index))
         pod_vms[index] = vm_index
         try:
-            vm_pods[vm_index].append(index)
+            vm_pods[vm_index-1].append(index)
+            print("vm_pods[" + str(vm_index-1) + "] is now " + str(vm_pods[vm_index-1]))
         except:
-            vm_pods[vm_index] = [index]
+            vm_pods[vm_index-1] = [index]
+            print("vm_index is %d, appending %d.\n" % (vm_index,index))
 
-    for key in vm_pods:
-        print('vm '+ str(key))
-        for pod_index in vm_pods[key]:
-            print(pod_name[pod_index])
+    print("pod_vms: " + str(pod_vms))
+    vm_pods = {k: v for k,v in vm_pods.items() if v}
 
-    for index in range(len(pod_indices)):
-        try:
-            result = api.pod_remove_task(pod_id = pod_ids[index], remove_vms = removal_type);
-        except:
-            result = {'status':'FAILED'}
-        print(pod_names[index] + '(' + str(pod_ids[index]) + '):' + result['status'])
+    print("vm pods value: "+ str(vm_pods))
+    for vm_num in vm_pods.keys():
+        print("vm[" + str(vm_num) + "] has pods " + str(vm_pods[vm_num]))
+
+
+    while vm_pods != {}:
+
+        # pool = Pool(processes=len(vm_pods))
+        # results = []
+
+        # grab initial element from each pod vm list
+        pod_ids_to_delete = list(map(lambda x:pod_ids[x],list(map(lambda x:x[0],vm_pods.values()))))
+
+        #delete initial element from each pod vm list (and squeeze out empties)
+        vm_pods = {k: vm_pods[k][1:] for k in vm_pods}
+        vm_pods = {k: v for k,v in vm_pods.items() if v}
+
+        map(lambda x:x.pop(0), vm_pods.values())
+
+        # [pool.map_async(remove_func, (pod_id, removal_type, api), callback = lambda x: Global_results.append(x)) for pod_id in pod_ids_to_delete]
+        # [pool.map_async(printer_func, (pod_id,), callback = lambda x: Global_results.append(x)) for pod_id in pod_ids_to_delete]
+        for pod_id in pod_ids_to_delete:
+            print(remove_func(pod_id, removal_type, api))
+
+        # print('Starting pool for pods: ' + str(pod_ids_to_delete))
+        # pool.close()
+        # pool.join()
+   
+    # for result in Global_results:
+    #     print(result)
+
+
+
 
 if __name__ == "__main__":
    main()
