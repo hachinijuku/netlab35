@@ -12,6 +12,7 @@ import re
 from netlab.client import Client
 from netlab.enums import ReservationType
 
+WILSON_ACC_ID = 100162
 def main():
 
     si = None
@@ -72,7 +73,7 @@ def main():
                 result = api.reservation_make(type=ReservationType.INSTRUCTOR,
                                               pod_id=pod_pids[index],
                                               end_time=end,
-                                              acc_id=100001)
+                                              acc_id=WILSON_ACC_ID)
 
             else:
                 try:
@@ -80,10 +81,11 @@ def main():
                                                   pod_id=pod_pids[index],
                                                   end_time=end,
                                                   start_time=start,
-                                                  acc_id=100001) 
+                                                  acc_id=WILSON_ACC_ID) 
                     print('Reservation of pod ' + str(pod_names[index]) + ':'+str(datetime.now())+':'+str(result['res_id']))
-                except:
+                except BaseException as err:
                     print('Problem reserving pod ' + str(pod_names[index]) + ' -- pod skipped')
+                    print(format(err))
 
 
             
