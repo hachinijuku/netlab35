@@ -13,30 +13,19 @@ optional arguments:
   -r {none,local,datacenter,disk}, --removal_type {none,local,datacenter,disk}
 '''
 import argparse
-import enum
 import sys
 import os
 import subprocess
-import datetime
 import re
-from multiprocessing import Pool
-import random
-
 from netlab.client import Client
 from netlab.enums import RemoveVMS
-from netlab.enums import PodCategory
 
-Global_results = []
 
-## Sorry to ask this.
-# Need to change this to be dynamically determined
-NUM_VMS = 4
-
-def delete_pod(api, this_pod_id, this_pod_name, remove_vms_arg):
-    result = api.pod_state_change(pod_id=this_pod_id, state = "OFFLINE")
+def delete_pod(api, this_pod_id, remove_vms_arg):
+    api.pod_state_change(pod_id=this_pod_id, state="OFFLINE")
     try:
-        result = api.pod_remove_task(pod_id = this_pod_id,
-                                     remove_vms = remove_vms_arg);
+        api.pod_remove_task(pod_id=this_pod_id,
+                            remove_vms=remove_vms_arg)
         return 'Pod ' + str(this_pod_id) + ': OK'
     except:
         return 'Pod ' + str(this_pod_id) + ':' + str(sys.exc_info()[0])
@@ -64,13 +53,13 @@ def main():
 
     # Check if any arguments are provided
     if not args.podexprs:
-        print('No pods specified',file=sys.stderr)
+        print('No pods specified', file=sys.stderr)
         sys.exit(1)
 
     # Identify the pod names matching the regular expressions
     api = Client()
     all_pods = api.pod_list()
-    pod_indices=[]
+    pod_indices = []
     for expr in args.podexprs:
         prog = re.compile(expr)
         this_index = list(filter(lambda x: x != None,
@@ -96,10 +85,10 @@ def main():
     # First offline all the pods
     if len(pod_indices) == 1:
         print('Deleting' + str(pod_ids[0]) + ':' + pod_names[0])
-        delete_pod(api, pod_ids[0], pod_names[0], removal_type)
+        delete_pod(api, pod_ids[0], removal_type)
     else:
         sub_procs = []
-        interpreter_path = sys.executable;
+        interpreter_path = sys.executable
         script_path = os.path.realpath(__file__)
         for index in range(len(pod_indices)):
             if args.n:
@@ -115,4 +104,4 @@ def main():
 
 
 if __name__ == "__main__":
-   main()
+    main()

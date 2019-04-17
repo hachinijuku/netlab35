@@ -1,14 +1,12 @@
 #! /usr/bin/env python3
 
 import argparse
-from multiprocessing.synchronize import Lock
 from typing import List, Any, Tuple, Union
 
 from netlab.client import Client
 from netlab.enums import PodCategory
 import sys
 import os
-from multiprocessing import Pool
 import subprocess
 
 # Site specific information
@@ -24,10 +22,10 @@ def get_unused_pid(id_list, hwm, index):
         return index - num_in_list + hwm + 1
 
 
-def do_clone(api, src_pid, pids_to_assign, pod_prefix, host_id, do_clone):
-    if pids_to_assign == []:
+def do_clone(api, src_pid, pids_to_assign, pod_prefix, host_id, do_this_clone):
+    if not pids_to_assign:
         return []
-    elif do_clone:
+    elif do_this_clone:
         clone_pod_name = pod_prefix + str(pids_to_assign[0])
         result = api.pod_clone_task(source_pod_id=src_pid,
                                     clone_pod_id=pids_to_assign[0],
@@ -40,11 +38,9 @@ def do_clone(api, src_pid, pids_to_assign, pod_prefix, host_id, do_clone):
         return []
     else:
         sub_procs = []
-        interpreter_path = sys.executable;
+        interpreter_path = sys.executable
         script_path = os.path.realpath(__file__)
         for this_pid in pids_to_assign:
-            clone_pod_name = pod_prefix + str(this_pid)
-
             args = [interpreter_path, script_path,
                     '--src_pid', src_pid,
                     '--num_clones', '1',
@@ -53,6 +49,8 @@ def do_clone(api, src_pid, pids_to_assign, pod_prefix, host_id, do_clone):
                     '--vm_host', str(host_id)]
             sub_procs.append(subprocess.Popen(args))
         return sub_procs
+
+
 def main():
     parser = argparse.ArgumentParser(description='Remove VMs from vcenter host')
     parser.add_argument('--src_pid',
@@ -81,10 +79,8 @@ def main():
                         action='store_const',
                         const=True,
                         help='dry run')
-
     args = parser.parse_args()
     api = Client()
-
     num_clones = int(args.num_clones)
 
     # Check to see if we're doing just 1 pod
@@ -105,7 +101,6 @@ def main():
         if src_pod_cat != PodCategory.MASTER_VM:
             print('Sorry. We will not copy from a non-Master pod.')
             sys.exit()
-
 
         # Divvy up pods (or at least args to create them) to VM hosts in round robin fashion.
         #
