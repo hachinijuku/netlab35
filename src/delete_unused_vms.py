@@ -36,8 +36,6 @@ def main():
                         default=RemoveVMS.NONE.name.lower(),
                         dest="remove_type")
     args = parser.parse_args()
-    
-
 
     api = Client()
     # print('\n'.join(list(map(str,inspect.getmembers(api,predicate=inspect.ismethod)))))
@@ -98,7 +96,21 @@ def main():
         #        print('Pod Removed:'+str(datetime.datetime.now())+':'+pod_names[index] + ':'+result['status'])
 
         
+    for vm in relevant_unused_vms:
+        print('  '+vm['vm_name']+': '+str(vm['pc_pod_id']))
+
+    yes_no = input("Do you want to remove all these unused VMs (y/n)? ")
+    if yes_no[0].lower() != 'y':
+        sys.exit(2)
 
 
+    for vm in relevant_unused_vms:
+        try:
+            print('Attempting to remove '+vm['vm_name'])
+            result = api.vm_inventory_remove_local(vm_id = vm['vm_id'])
+            print( ' Result: '+str(result))
+        except:
+            print(' Failed: ' + str(sys.exc_info()[0]))
+                  
 if __name__ == "__main__":
    main()
