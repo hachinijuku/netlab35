@@ -7,7 +7,7 @@ from typing import List, Any, Tuple, Union
 from netlab.client import Client
 from netlab.enums import PodCategory
 import sys
-from multiprocessing import Pool, Lock
+from multiprocessing import Pool
 
 # Site specific information
 DATASTORE = 'nfs-vm2'
@@ -22,26 +22,31 @@ def get_unused_pid(id_list, hwm, index):
         return index - num_in_list + hwm + 1
 
 
-def do_clone(print_lock, api, src_pid, pids_to_assign, pod_prefix, host_id):
-    for this_pid in pids_to_assign:
-        clone_pod_name = pod_prefix + str(this_pid)
+def do_clone(api, src_pid, pids_to_assign, pod_prefix, host_id, do_clone):
+    if do_clone:
         result = api.pod_clone_task(source_pod_id=src_pid,
-                                    clone_pod_id=this_pid,
+                                    clone_pod_id=pids_to_assign[0],
                                     clone_pod_name=clone_pod_name,
                                     pc_clone_specs={'clone_datastore': DATASTORE,
                                                     'clone_vh_id': host_id})
         #            except:
         #                result = {'status':'FAILED'}
-        print_lock.acquire()
         print(clone_pod_name + '(' + str(this_pid) + '):' + result['status'])
-        print_lock.release()
+    else:
+        for this_pid in pids_to_assign:
+            clone_pod_name = pod_prefix + str(this_pid)
 
+            interpreter_path = sys.executable;
+            subprocess.run([interpreter_path,'--src_pid', src_pid,
+                            '--num_clones', '1',
+                            '--pod_prefix', pod_prefix,
+                            '--pid', str(this_pid),
+                            '--vm_host', host_id])
 
 def main():
     parser = argparse.ArgumentParser(description='Remove VMs from vcenter host')
     parser.add_argument('--src_pid',
                         required=True,
-                        type=int,
                         help='source pod id')
     #    parser.add_argument('--pod_rng', required=True, help='cloned pod id range')
     parser.add_argument('--num_clones',
@@ -54,6 +59,14 @@ def main():
                         required=False,
                         help='datastore for clones',
                         default=DATASTORE)
+    parser.add_argument('--vm_host',
+                        required=False,
+                        type=int,
+                        default=-1)
+    parser.add_argument('--pid',
+                        required=False,
+                        type=int
+                        default=0)
     parser.add_argument('-n',
                         action='store_const',
                         const=True,
@@ -64,38 +77,43 @@ def main():
 
     num_clones = int(args.num_clones)
 
-    # find available pods
-    pod_ids = list(map(lambda x: x["pod_id"], api.pod_list()))
-    pid_hwm = max(pod_ids)
-    unused_low_pods = list(set(range(1, pid_hwm)) - set(pod_ids))
+    # Check to see if we're doing just 1 pod
+    if vm_host != -1:
+        assert(num_clones == 1)
+        assert(this_pid != 0)
+        do_clone(api, args.src_pid, [this_pid], args.pod_prefix, vm_host, True)
+    else:
 
-    # identify available hosts for VMs
-    num_hosts = len(VHOST_IDS)
+        # find available pods
+        pod_ids = list(map(lambda x: x["pod_id"], api.pod_list()))
+        pid_hwm = max(pod_ids)
+        unused_low_pods = list(set(range(1, pid_hwm)) - set(pod_ids))
 
-    src_pod_cat = api.pod_get(pod_id=args.src_pid, properties='pod_cat')['pod_cat']
-    if src_pod_cat != PodCategory.MASTER_VM:
-        print('Sorry. We will not copy from a non-Master pod.')
-        sys.exit()
+        # identify available hosts for VMs
+        num_hosts = len(VHOST_IDS)
 
-    # Divvy up pods (or at least args to create them) to VM hosts in round robin fashion.
-    #
-    # The theory is students will grab them in order and this will do
-    # a static load balancing based on expected human behavior
-    pids_to_assign = list(map(lambda x: get_unused_pid(unused_low_pods, pid_hwm, x),
-                              range(num_clones)))
-    pid_assignment_lists = [pids_to_assign[x::num_hosts] for x in range(num_hosts)]
-    print_lock = Lock()
-    pool_args: List[Tuple[Lock, Client, Any, List[Union[int, Any]], Any, int]] = \
-        [(print_lock,
-          api,
-          args.src_pid,
-          pid_assignment_lists[x],
-          args.pod_prefix,
-          VHOST_IDS[x])
-         for x in range(num_hosts)]
+        src_pod_cat = api.pod_get(pod_id=args.src_pid, properties='pod_cat')['pod_cat']
+        if src_pod_cat != PodCategory.MASTER_VM:
+            print('Sorry. We will not copy from a non-Master pod.')
+            sys.exit()
 
-    host_pool = Pool(num_hosts)
-    host_pool.map(do_clone, pool_args)
+
+        # Divvy up pods (or at least args to create them) to VM hosts in round robin fashion.
+        #
+        # The theory is students will grab them in order and this will do
+        # a static load balancing based on expected human behavior
+        pids_to_assign = list(map(lambda x: get_unused_pid(unused_low_pods, pid_hwm, x),
+                                  range(num_clones)))
+        pid_assignment_lists = [pids_to_assign[x::num_hosts] for x in range(num_hosts)]
+        pool_args: List[Tuple[Client, Any, List[Union[int, Any]], Any, int, bool]] = \
+            [(api,
+              args.src_pid,
+              pid_assignment_lists[x],
+              args.pod_prefix,
+              VHOST_IDS[x],
+              False)
+            for x in range(num_hosts)]
+        map(do_clone, pool_args)
 
 
 if __name__ == "__main__":
