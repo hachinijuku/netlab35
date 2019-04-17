@@ -7,7 +7,9 @@ from typing import List, Any, Tuple, Union
 from netlab.client import Client
 from netlab.enums import PodCategory
 import sys
+import os
 from multiprocessing import Pool
+import subprocess
 
 # Site specific information
 DATASTORE = 'nfs-vm2'
@@ -23,7 +25,10 @@ def get_unused_pid(id_list, hwm, index):
 
 
 def do_clone(api, src_pid, pids_to_assign, pod_prefix, host_id, do_clone):
-    if do_clone:
+    if pids_to_assign == []:
+        return []
+    elif do_clone:
+        clone_pod_name = pod_prefix + str(pids_to_assign[0])
         result = api.pod_clone_task(source_pod_id=src_pid,
                                     clone_pod_id=pids_to_assign[0],
                                     clone_pod_name=clone_pod_name,
@@ -31,18 +36,23 @@ def do_clone(api, src_pid, pids_to_assign, pod_prefix, host_id, do_clone):
                                                     'clone_vh_id': host_id})
         #            except:
         #                result = {'status':'FAILED'}
-        print(clone_pod_name + '(' + str(this_pid) + '):' + result['status'])
+        print(clone_pod_name + '(' + str(pids_to_assign[0]) + '):' + result['status'])
+        return []
     else:
+        sub_procs = []
+        interpreter_path = sys.executable;
+        script_path = os.path.realpath(__file__)
         for this_pid in pids_to_assign:
             clone_pod_name = pod_prefix + str(this_pid)
 
-            interpreter_path = sys.executable;
-            subprocess.run([interpreter_path,'--src_pid', src_pid,
-                            '--num_clones', '1',
-                            '--pod_prefix', pod_prefix,
-                            '--pid', str(this_pid),
-                            '--vm_host', host_id])
-
+            args = [interpreter_path, script_path,
+                    '--src_pid', src_pid,
+                    '--num_clones', '1',
+                    '--pod_prefix', pod_prefix,
+                    '--pid', str(this_pid),
+                    '--vm_host', str(host_id)]
+            sub_procs.append(subprocess.Popen(args))
+        return sub_procs
 def main():
     parser = argparse.ArgumentParser(description='Remove VMs from vcenter host')
     parser.add_argument('--src_pid',
@@ -65,7 +75,7 @@ def main():
                         default=-1)
     parser.add_argument('--pid',
                         required=False,
-                        type=int
+                        type=int,
                         default=0)
     parser.add_argument('-n',
                         action='store_const',
@@ -78,12 +88,11 @@ def main():
     num_clones = int(args.num_clones)
 
     # Check to see if we're doing just 1 pod
-    if vm_host != -1:
+    if args.vm_host != -1:
         assert(num_clones == 1)
-        assert(this_pid != 0)
-        do_clone(api, args.src_pid, [this_pid], args.pod_prefix, vm_host, True)
+        assert(args.pid != 0)
+        do_clone(api, args.src_pid, [args.pid], args.pod_prefix, args.vm_host, True)
     else:
-
         # find available pods
         pod_ids = list(map(lambda x: x["pod_id"], api.pod_list()))
         pid_hwm = max(pod_ids)
@@ -113,7 +122,8 @@ def main():
               VHOST_IDS[x],
               False)
             for x in range(num_hosts)]
-        map(do_clone, pool_args)
+        sub_procs = list(map(lambda x: do_clone(*x), pool_args))
+        list(map(lambda x: [y.wait(timeout=100) for y in x], sub_procs))
 
 
 if __name__ == "__main__":
