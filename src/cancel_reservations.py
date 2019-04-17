@@ -3,10 +3,10 @@
 import argparse
 import enum
 import sys
-import exrex
+import re
 
 import datetime
-import re
+import exrex
 
 from netlab.client import Client
 from netlab.enums import PodState
