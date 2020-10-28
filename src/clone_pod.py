@@ -51,8 +51,8 @@ import os
 import subprocess
 import time
 
-
 Debug = None
+api = Client()
 
 def get_unused_pid(id_list, hwm, index):
     num_in_list = len(id_list)
@@ -104,6 +104,7 @@ def do_clone(api, src_pid, pids_to_assign, pod_prefix, host_id, do_this_clone, d
 
 def main():
     global Debug
+    global api
     
     parser = argparse.ArgumentParser(description='Remove VMs from vcenter host')
     parser.add_argument('--src_pid',
@@ -137,7 +138,6 @@ def main():
                         const=True,
                         help='dry run')
     args = parser.parse_args()
-    api = Client()
     num_clones = int(args.num_clones)
     Debug = args.debug
      
