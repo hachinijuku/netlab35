@@ -53,6 +53,7 @@ import time
 
 Debug = None
 api = Client()
+DELETION_SCRIPT_NAME = 'delete_pods.py'
 
 def get_unused_pid(id_list, hwm, index):
     num_in_list = len(id_list)
@@ -62,6 +63,8 @@ def get_unused_pid(id_list, hwm, index):
         return index - num_in_list + hwm + 1
 
 def do_clone(api, src_pid, pids_to_assign, pod_prefix, host_id, do_this_clone, datastore):
+    global DELETION_SCRIPT_NAME
+    
     time.sleep(5)
     if not pids_to_assign:
         return []
@@ -77,10 +80,23 @@ def do_clone(api, src_pid, pids_to_assign, pod_prefix, host_id, do_this_clone, d
                                                         'clone_role':'NORMAL',
                                                         'clone_vh_id':host_id})
             print(f'{clone_pod_name}({pids_to_assign[0]}):{result["status"]}')
+            if result['status'] != 'OK':
+                # delete this pod
+                print(f'deleting pod {clone_pod_name}')
+                interpreter_path = sys.executable
+                script_path = os.path.realpath(__file__)
+                script_dir = script_path[:script_path.rfind('/')]
+                args = [interpreter_path, f'{script_dir}/{DELETION_SCRIPT_NAME}',
+                       '--removal_type', 'disk',
+                       '-force',
+                       'clone_pod_name']
+                print(f'Executing [{args}]', file=sys.stderr, flush=True)
+                subprocess.Popen(args)
         except Exception as err:
             print(f'clone_pod_id={pids_to_assign[0]}\n' +
                   f'clone_pod_name={clone_pod_name}\n' +
                   f'  pc clone_datastore={datastore}\n' +
+                  f'  pc clone_vn_id={host_id}',
                   f'  pc clone_vn_id={host_id}',
                   file=sys.stderr)
             print(f'Clone failed:{str(err)}', file=sys.stderr)
