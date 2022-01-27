@@ -19,6 +19,7 @@ import subprocess
 import re
 from netlab.client import Client
 from netlab.enums import RemoveVMS
+from netlab.enums import PodState
 
 
 def delete_pod(api, this_pod_id, remove_vms_arg):
@@ -37,6 +38,10 @@ def main():
                         action='store_const',
                         const=True,
                         help='dry run')
+    parser.add_argument('-offline_only',
+                        action='store_const',
+                        const=True,
+                        help='delete only offline pods')
     parser.add_argument('-force',
                         action='store_const',
                         const=True)
@@ -59,6 +64,19 @@ def main():
     # Identify the pod names matching the regular expressions
     api = Client()
     all_pods = api.pod_list()
+
+    if args.offline_only:
+        #print(f'all_pods-state = {list(map(lambda x: x["pod_current_state"],all_pods))}')
+    
+        all_pods = list(filter(lambda x: x['pod_current_state'].name == 'OFFLINE', all_pods))
+
+        #print(f'all offline pods={list(map(lambda x: x["pod_name"],all_pods))}')
+    
+    # check for offline requirement
+    if args.offline_only:
+        all_pods
+        
+
     pod_indices = []
     for expr in args.podexprs:
         prog = re.compile(expr)
@@ -71,8 +89,9 @@ def main():
     pod_names = [all_pods[x]['pod_name'] for x in pod_indices]
     pod_ids = [all_pods[x]['pod_id'] for x in pod_indices]
 
-    # Verify pod deletion
 
+        
+    # Verify pod deletion
     if not args.force:
         print('Pods to be deleted')
         for name in pod_names:
@@ -85,7 +104,7 @@ def main():
     # First offline all the pods
     if len(pod_indices) == 1:
         print('Deleting' + str(pod_ids[0]) + ':' + pod_names[0])
-        delete_pod(api, pod_ids[0], removal_type)
+        print(f'  {delete_pod(api, pod_ids[0], removal_type)}')
     else:
         sub_procs = []
         interpreter_path = sys.executable
