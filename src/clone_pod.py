@@ -1,25 +1,38 @@
 #! /usr/bin/env python3
 
 """
-clone_pods.py
+clone_pod.py
 
-Run with --help to find calling sequence. This discusses the philosophy.
+usage: clone_pod.py [-h] --src_pid SRC_PID --num_clones NUM_CLONES
+                    --pod_prefix POD_PREFIX
+                    [--clone_datastore CLONE_DATASTORE] [-debug] [-n] [-q]
 
-If called without the --vm_host parameter set (the normal method),
-this script clones a master pod and distributes the clones evenly
+Remove VMs from vcenter host
+
+options:
+  -h, --help            show this help message and exit
+  --src_pid SRC_PID     source pod id
+  --num_clones NUM_CLONES
+                        number of clones to generate
+  --pod_prefix POD_PREFIX
+                        prefix for cloned pod names
+  --clone_datastore CLONE_DATASTORE
+                        datastore for clones
+  -debug                debug mode (kind of verbose)
+  -n                    dry run
+  -q                    quiet (no pod messages)
+
+This script clones a master Netlab-VE+ pod and distributes the clones evenly
 across a set of hosts in a datacenter given by environment variable
 
   NETLAB_VDC
 
 To get the desired behavior, it determines the number of clones and
 available pod numbers and shuffles them across datacenter hosts.
-Then it calls itself recursively using the --vm_host parameter to
-allocate pods one at a time to specific hosts.
-
 
 MIT License
 
-Copyright (c) 2020 Joseph N. Wilson
+Copyright (c) 2022 Joseph N. Wilson
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -42,91 +55,109 @@ SOFTWARE.
 """
 
 import argparse
+import asyncio
+from netlab.async_client import NetlabClient
 from typing import List, Any, Tuple, Union
 
-from netlab.client import Client
 from netlab.enums import PodCategory
+from netlab.enums import HDRSeverity
 import sys
 import os
-import subprocess
-import time
 
-Debug = None
-api = Client()
-DELETION_SCRIPT_NAME = 'delete_pods.py'
 
-def get_unused_pid(id_list, hwm, index):
-    num_in_list = len(id_list)
-    if index < num_in_list:
-        return id_list[index]
-    else:
-        return index - num_in_list + hwm + 1
-
-def do_clone(api, src_pid, pids_to_assign, pod_prefix, host_id, do_this_clone, datastore):
-    global DELETION_SCRIPT_NAME
-    
-    time.sleep(5)
-    if not pids_to_assign:
-        return []
-    elif do_this_clone:
-        clone_pod_name = pod_prefix + str(pids_to_assign[0])
-        if Debug:
-            print(f'calling api.pod_clone_task({src_pid},\n\t{pids_to_assign}')
-        try:
-            result = api.pod_clone_task(source_pod_id=src_pid,
-                                        clone_pod_id=pids_to_assign[0],
-                                        clone_pod_name=clone_pod_name,
-                                        pc_clone_specs={'clone_datastore': datastore,
-                                                        'clone_role':'NORMAL',
-                                                        'clone_vh_id':host_id})
-            print(f'{clone_pod_name}({pids_to_assign[0]}):{result["status"]}')
-            if result['status'] != 'OK':
-                # delete this pod
-                print(f'deleting pod {clone_pod_name}')
-                interpreter_path = sys.executable
-                script_path = os.path.realpath(__file__)
-                script_dir = script_path[:script_path.rfind('/')]
-                args = [interpreter_path, f'{script_dir}/{DELETION_SCRIPT_NAME}',
-                       '--removal_type', 'disk',
-                       '-force',
-                       'clone_pod_name']
-                print(f'Executing [{args}]', file=sys.stderr, flush=True)
-                subprocess.Popen(args)
-        except Exception as err:
-            print(f'clone_pod_id={pids_to_assign[0]}\n' +
-                  f'clone_pod_name={clone_pod_name}\n' +
-                  f'  pc clone_datastore={datastore}\n' +
-                  f'  pc clone_vn_id={host_id}',
-                  f'  pc clone_vn_id={host_id}',
-                  file=sys.stderr)
-            print(f'Clone failed:{str(err)}', file=sys.stderr)
-            sys.exit(1)
-        return []
-    else:
-        if Debug:
-            print(f'pids to assign {pids_to_assign}')
-        sub_procs = []
-        interpreter_path = sys.executable
-        script_path = os.path.realpath(__file__)
-        for this_pid in pids_to_assign:
-            args = [interpreter_path, script_path,
-                    '--src_pid', src_pid,
-                    '--num_clones', '1',
-                    '--pod_prefix', pod_prefix,
-                    '--pid', str(this_pid),
-                    '--vm_host', str(host_id)]
-            sub_procs.append(subprocess.Popen(args))
-        return sub_procs
-
-def main():
+##
+# do_one_vh: Clones the src_pid pod to each of the pod_ids,
+# creating cloned vms on host vh_id associated with
+# the specified datastore.
+#
+# api: netlab client connection
+# src_pid: id of pod to clone
+# vh_id: id of vmhost to clone vms to
+# pod_ids: ids of pods to be created
+# pod_prefix: prefix of name to assign to pod. Suffix is the pod_id
+# datastore: Either '' or name of datastore on which to store the vms
+#
+async def do_one_vh(api,
+                    src_pid,
+                    vh_id,
+                    pod_ids,
+                    pod_prefix,
+                    datastore):
     global Debug
-    global api
-    
-    parser = argparse.ArgumentParser(description='Remove VMs from vcenter host')
+    global Dryrun
+    global Quiet
+    global Summary
+
+    for pod_id in pod_ids:
+        try:
+            pod_name = f'{pod_prefix}{pod_id}'
+            if Dryrun or not Quiet:
+                print(f'requested pod_clone_task({src_pid},'
+                      f'{pod_id},{pod_name},{vh_id})')
+            if Dryrun:
+                return
+
+            specs = {'clone_datastore': datastore,
+                     'clone_role': 'NORMAL',
+                     'clone_vh_id': vh_id}
+            result = \
+                await api.pod_clone_task(source_pod_id=src_pid,
+                                         clone_pod_id=pod_id,
+                                         clone_pod_name=pod_name,
+                                         pc_clone_specs=specs,
+                                         severity_level=HDRSeverity.TRACE0)
+            Summary.append(f'{result["status"]}:{pod_id}')
+            if not Quiet:
+                print(f'{result["status"]}:{pod_id}')
+            if Debug:
+                print(f'result:{result}')
+        except Exception as err:
+            print(f'Exception:{err}')
+            print(f'  pod_id:{pod_id},pod_name:{pod_name},'
+                  f'datastore:"{datastore}",vh_id:{vh_id}')
+
+
+##
+# do_clone: Clone pods
+#
+# api: netlab client connection
+# src_pid: id of pod to clone
+# pid_assignment_dict: map from vm_host id to list of pods on that vm_host
+# pod_prefix: Prefix of name of pod to be created. Suffix will be pod_id
+# datastore: Either '' or name of datastore on which to store the vms
+#
+async def do_clone(api,
+                   src_pid,
+                   pid_assignment_dict,
+                   pod_prefix,
+                   datastore):
+    if Debug:
+        print(f'do_clone({src_pid},pid_assignment_dict,'
+              f'{pod_prefix},"{datastore}")')
+    tasks = []
+    for vh_id in pid_assignment_dict.keys():
+        tasks.append(asyncio.create_task(do_one_vh(api,
+                                                   src_pid,
+                                                   vh_id,
+                                                   pid_assignment_dict[vh_id],
+                                                   pod_prefix,
+                                                   datastore)))
+    await asyncio.gather(*tasks, return_exceptions=True)
+
+
+async def main():
+    global Debug
+    global Dryrun
+    global Quiet
+    global Summary
+
+    Summary = []
+
+    parser = \
+        argparse.ArgumentParser(description='Remove VMs from vcenter host')
     parser.add_argument('--src_pid',
                         required=True,
                         help='source pod id')
-    #    parser.add_argument('--pod_rng', required=True, help='cloned pod id range')
     parser.add_argument('--num_clones',
                         required=True,
                         help='number of clones to generate')
@@ -137,14 +168,6 @@ def main():
                         required=False,
                         help='datastore for clones',
                         default='')
-    parser.add_argument('--vm_host',
-                        required=False,
-                        type=int,
-                        default=-1)
-    parser.add_argument('--pid',
-                        required=False,
-                        type=int,
-                        default=0)
     parser.add_argument('-debug',
                         action='store_const',
                         const=True,
@@ -153,63 +176,73 @@ def main():
                         action='store_const',
                         const=True,
                         help='dry run')
+    parser.add_argument('-q',
+                        action='store_const',
+                        const=True,
+                        help='quiet (no pod messages)')
     args = parser.parse_args()
     num_clones = int(args.num_clones)
     Debug = args.debug
-     
+    Dryrun = args.n
+    Quiet = args.q
 
-    datacenter_id = api.vm_datacenter_find(vdc_name=os.environ['NETLAB_VDC'])
-    vh_ids = list(map(lambda x: x['vh_id'], api.vm_host_list(vdc_id=datacenter_id)))
+    async with NetlabClient() as api:
+        datacenter_id = \
+            await api.vm_datacenter_find(vdc_name=os.environ['NETLAB_VDC'])
+        vh_ids = list(map(lambda x: x['vh_id'],
+                          await api.vm_host_list(vdc_id=datacenter_id)))
 
-   
-    # Check to see if we're doing just 1 pod
-    if args.vm_host != -1:
-        assert(num_clones == 1)
-        assert(args.pid != 0)
-        do_clone(api, args.src_pid, [args.pid], args.pod_prefix, args.vm_host, True, args.clone_datastore)
-    else:
-        # find available pods
-        pod_ids = list(map(lambda x: x["pod_id"], api.pod_list()))
-        pid_hwm = max(pod_ids)
-
-        unused_low_pods = list(set(range(1, pid_hwm)) - set(pod_ids))
-
-        # identify available hosts for VMs
-        num_hosts = len(vh_ids)
-
-        src_pod_cat = api.pod_get(pod_id=args.src_pid, properties='pod_cat')['pod_cat']
+        # Check for valid source pid
+        src_pod_cat = (await api.pod_get(pod_id=args.src_pid,
+                                         properties='pod_cat'))['pod_cat']
         if src_pod_cat != PodCategory.MASTER_VM:
             print('Sorry. We will not copy from a non-Master pod.')
             sys.exit()
 
-        # Divvy up pods (or at least args to create them) to VM hosts in round robin fashion.
+        # find currently allocated pods
+        pod_ids = list(map(lambda x: x["pod_id"], await api.pod_list()))
+        pid_hwm = max(pod_ids)
+
+        # get sorted list of available pids
+        # (assign unused low pod numbers first)
+        unused_low_pods = list(set(range(1, pid_hwm)) - set(pod_ids))
+        pids_to_assign = unused_low_pods[:num_clones] \
+            + list(range(pid_hwm+1, pid_hwm+1+num_clones-len(unused_low_pods)))
+
+        # identify available hosts for VMs
+        num_hosts = len(vh_ids)
+
+        # Divvy up pods (or at least args to create them) to VM hosts
+        # in round robin fashion.
         #
-        # The theory is students will grab them in order and this will do
-        # a static load balancing based on expected human behavior
-        pids_to_assign = list(map(lambda x: get_unused_pid(unused_low_pods, pid_hwm, x),
-                                  range(num_clones)))
+        # The theory is that students will grab them in order and this will
+        # do a static load balancing based on expected human behavior
 
         if Debug:
             print(f'{vh_ids}, {len(vh_ids)}')
-            print(f'{pids_to_assign}')
-        #return
-        
-        pid_assignment_dict = {vh_ids[i]:pids_to_assign[i:len(pids_to_assign):len(vh_ids)] for i in range(0,len(vh_ids))}
-        if Debug:
-            print(f'{args.src_pid} {args.pod_prefix} {vh_ids}{pid_assignment_dict} {num_hosts}');
-        #return
-        pool_args: List[Tuple[Client, Any, List[Union[int, Any]], Any, int, bool]] = \
-            [(api,
-              args.src_pid,
-              pid_assignment_dict[vh_id],
-              args.pod_prefix,
-              vh_id,
-              False,
-              args.clone_datastore)
-             for vh_id in vh_ids]
-        sub_procs = list(map(lambda x: do_clone(*x), pool_args))
-        list(map(lambda x: [y.wait(timeout=100) for y in x], sub_procs))
+            print(f'pids to assign:{pids_to_assign}')
 
+        pid_assignment_dict = {vh_ids[i]:
+                               pids_to_assign[i:
+                                              len(pids_to_assign):
+                                              len(vh_ids)]
+                               for i in range(0, len(vh_ids))}
+
+        if Debug:
+            print(f'{args.src_pid} {args.pod_prefix}'
+                  f'{vh_ids} {pid_assignment_dict} {num_hosts}')
+
+        await do_clone(api,
+                       args.src_pid,
+                       pid_assignment_dict,
+                       args.pod_prefix,
+                       args.clone_datastore)
+
+    if Dryrun:
+        print('No action taken (dry run).')
+    Summary.sort()
+    separator = '\n  '
+    print(f'Pod Summary:{separator}{separator.join(Summary)}')
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
